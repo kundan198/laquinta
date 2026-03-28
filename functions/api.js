@@ -23,10 +23,15 @@ const supplyOrderSchema = new mongoose.Schema({
   mon: { type: String, unique: true }, orders: mongoose.Schema.Types.Mixed
 }, { timestamps: true });
 
+const supplyLogSchema = new mongoose.Schema({
+  item: String, qty: String, mon: String, date: String
+}, { timestamps: true });
+
 const CashEntry = mongoose.models.CashEntry || mongoose.model('CashEntry', cashSchema);
 const ServiceEntry = mongoose.models.ServiceEntry || mongoose.model('ServiceEntry', serviceSchema);
 const CustomSupply = mongoose.models.CustomSupply || mongoose.model('CustomSupply', customSupplySchema);
 const SupplyOrder = mongoose.models.SupplyOrder || mongoose.model('SupplyOrder', supplyOrderSchema);
+const SupplyLog = mongoose.models.SupplyLog || mongoose.model('SupplyLog', supplyLogSchema);
 
 // ─── DATABASE CONNECTION ──────────────────────────────────
 let cachedDb = null;
@@ -48,16 +53,17 @@ const router = express.Router();
 
 router.get('/all', async (req, res) => {
   try {
-    const [cash, svcs, customSupDocs, supOrderDocs] = await Promise.all([
+    const [cash, svcs, customSupDocs, supOrderDocs, supplyLogs] = await Promise.all([
       CashEntry.find().sort({ createdAt: -1 }),
       ServiceEntry.find().sort({ createdAt: -1 }),
       CustomSupply.find(),
-      SupplyOrder.find()
+      SupplyOrder.find(),
+      SupplyLog.find().sort({ createdAt: -1 })
     ]);
     const customSup = customSupDocs.map(d => d.name);
     const supOrders = {};
     supOrderDocs.forEach(d => { supOrders[d.mon] = d.orders; });
-    res.json({ cash, svcs, customSup, supOrders });
+    res.json({ cash, svcs, customSup, supOrders, supplyLogs });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -94,6 +100,20 @@ router.post('/supply-orders', async (req, res) => {
     const { mon, orders } = req.body;
     const entry = await SupplyOrder.findOneAndUpdate({ mon }, { orders }, { upsert: true, new: true });
     res.json(entry);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/supply-log/bulk', async (req, res) => {
+  try {
+    const logs = await SupplyLog.insertMany(req.body); 
+    res.json(logs);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/supply-log/:id', async (req, res) => {
+  try {
+    await SupplyLog.findByIdAndDelete(req.params.id);
+    res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

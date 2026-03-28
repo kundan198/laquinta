@@ -100,6 +100,7 @@ tbody tr:hover td{background:rgba(255,255,255,0.02)}
 .si-qty span{font-size:12px;color:#64748b;font-weight:700;text-transform:uppercase}
 .del-btn{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);color:#f87171;font-size:14px;cursor:pointer;width:36px;height:36px;border-radius:12px;display:flex;align-items:center;justify-content:center;transition:all 0.3s}
 .del-btn:hover{background:#ef4444;color:#fff;border-color:#ef4444;transform:rotate(90deg)}
+.sup-qty-badge{background:rgba(201,168,76,0.1);color:#e0bf60;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;margin-top:5px;display:inline-block}
 .section-actions{display:flex;align-items:center;gap:20px}
 @media(max-width:900px){
   .stats{grid-template-columns:1fr 1fr}
@@ -273,12 +274,30 @@ tbody tr:hover td{background:rgba(255,255,255,0.02)}
               <input type="text" id="sup-q" placeholder="Search supplies..." oninput="renderSup()" style="max-width:250px;margin-bottom:0">
             </div>
           </div>
-          <div class="sgrid" id="sup-grid"></div>
           <div style="height:1px;background:rgba(255,255,255,0.05);margin:30px 0"></div>
-          <div style="display:flex;gap:15px;align-items:flex-end">
+          <div style="display:flex;gap:15px;align-items:flex-end;margin-bottom:30px">
             <div class="fg" style="flex:1"><label>Add Custom Supply Item</label><input type="text" id="sup-new" placeholder="Type item name and press Add..."></div>
             <button class="btn btn-ghost" onclick="addSupItem()" style="padding:15px 25px">+ Add Item</button>
           </div>
+          <div style="background:rgba(201,168,76,0.05);border:1px solid rgba(201,168,76,0.2);border-radius:24px;padding:30px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+               <h3 style="color:#fff;font-size:18px">Register Bulk Order</h3>
+               <div style="display:flex;gap:15px;align-items:center">
+                 <input type="date" id="sup-log-date" style="width:auto;padding:8px 15px;font-size:14px">
+                 <button class="btn btn-gold btn-sm" onclick="logSup()">Log Selected Items to History</button>
+               </div>
+            </div>
+            <p style="font-size:13px;color:#94a3b8">Log the selected items above into your order history for the current month and date.</p>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><span class="card-title">Order History</span></div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>DATE</th><th>ITEM</th><th>QTY</th><th>MONTH</th><th></th></tr></thead>
+            <tbody id="sup-h-tb"><tr><td colspan="5"><div class="empty">No history logged yet</div></td></tr></tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -324,7 +343,8 @@ async function hydrate(){
     D.svcs = data.svcs || [];
     D.customSup = data.customSup || [];
     D.supOrders = data.supOrders || {};
-    renderCash(); renderSvc(); renderDash(); renderSup();
+    D.supplyLogs = data.supplyLogs || [];
+    renderCash(); renderSvc(); renderDash(); renderSup(); renderSupHistory();
   } catch(e) {
     console.error('Failed to load data from server:', e);
   }
@@ -346,6 +366,7 @@ function buildSelects(){
     el.value=nowM();
   });
   document.getElementById('c-date').value=new Date().toISOString().split('T')[0];
+  document.getElementById('sup-log-date').value=new Date().toISOString().split('T')[0];
   var d=new Date();
   document.getElementById('datebdg').textContent=d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
 }
@@ -539,9 +560,12 @@ function renderSup(){
   document.getElementById('sup-grid').innerHTML=filtered.map(function(n){
     var o=ord[n]||{};
     var safe=esc(n);
+    // Calculate total ordered in this month from logs
+    var total=D.supplyLogs.filter(function(l){return l.item===n && l.mon===mon;}).reduce(function(s,l){return s+(parseInt(l.qty)||0);},0);
+
     return '<div class="si'+(o.chk?' chk':'')+'" data-n="'+safe+'" onclick="tglSup(this)">'+
       '<div class="chkmark">&#10003;</div>'+
-      '<div class="si-name">'+safe+'</div>'+
+      '<div class="si-name">'+safe+(total>0?'<br><span class="sup-qty-badge">Ordered: '+total+'</span>':'')+'</div>'+
       '<div class="si-qty" onclick="event.stopPropagation()">'+
       '<input type="text" placeholder="Qty" value="'+esc(o.qty||'')+'" oninput="saveSupSilent()">'+
       '<span>units</span></div></div>';
@@ -575,7 +599,51 @@ async function addSupItem(){
   document.getElementById('sup-new').value='';
   renderSup(); showSaved();
 }
-document.getElementById('sup-mon').addEventListener('change',renderSup);
+
+async function logSup(){
+  var mon=document.getElementById('sup-mon').value;
+  var date=document.getElementById('sup-log-date').value;
+  var bulk=[];
+  document.querySelectorAll('.si.chk').forEach(function(el){
+    var n=el.dataset.n;
+    var q=el.querySelector('input').value;
+    bulk.push({item:n, qty:q, mon:mon, date:date});
+  });
+  if(!bulk.length){alert('Please select items to log.');return;}
+  try {
+    const res = await fetch(API + '/api/supply-log/bulk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(bulk)
+    });
+    const saved = await res.json();
+    D.supplyLogs = (saved||[]).concat(D.supplyLogs);
+    renderSupHistory(); renderSup(); showSaved();
+    // Uncheck all after logging
+    document.querySelectorAll('.si.chk').forEach(function(el){el.classList.remove('chk');});
+    saveSup(); 
+  } catch(e) { alert('Error logging history'); }
+}
+
+function renderSupHistory(){
+  var tb=document.getElementById('sup-h-tb');
+  if(!D.supplyLogs || !D.supplyLogs.length){tb.innerHTML='<tr><td colspan="5"><div class="empty">No history logged yet</div></td></tr>';return;}
+  tb.innerHTML=D.supplyLogs.map(function(l){
+    return '<tr><td>'+esc(l.date)+'</td><td>'+esc(l.item)+'</td><td>'+esc(l.qty)+'</td><td>'+l.mon+'</td>'+
+      '<td><button class="del-btn" onclick="delSupLog(\''+l._id+'\')">&#10005;</button></td></tr>';
+  }).join('');
+}
+
+async function delSupLog(id){
+  if(!confirm('Delete this history entry?')) return;
+  try {
+    await fetch(API + '/api/supply-log/' + id, { method: 'DELETE' });
+    D.supplyLogs=D.supplyLogs.filter(function(l){return l._id!==id;});
+    renderSupHistory(); renderSup();
+  } catch(e) { alert('Error deleting log'); }
+}
+
+document.getElementById('sup-mon').addEventListener('change',function(){renderSup(); renderSupHistory();});
 
 function exportCSV(filename, rows) {
   var csv = '\uFEFF';
