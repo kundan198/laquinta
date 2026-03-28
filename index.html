@@ -255,51 +255,38 @@ tbody tr:hover td{background:rgba(255,255,255,0.02)}
 
     <div class="panel" id="p-sup">
       <div class="card">
-        <div class="card-head">
-          <span class="card-title">Supply Order Sheet</span>
-          <div class="section-actions">
-            <button class="btn btn-ghost btn-sm" onclick="exportSupCSV()">Export CSV</button>
-            <select id="sup-mon"></select>
-            <button class="btn btn-gold btn-sm" onclick="saveSup()">Save Orders</button>
-          </div>
-        </div>
+        <div class="card-head"><span class="card-title">Add Supply Entry</span></div>
         <div class="card-body">
-          <div class="sup-actions">
-            <div class="sup-stats">
-              <div class="sup-stat"><span>Items</span><span id="sup-t-cnt">0</span></div>
-              <div class="sup-stat"><span>Selected</span><span id="sup-s-cnt" style="color:#c9a84c">0</span></div>
+          <div class="fgrid">
+            <div class="fg span2">
+              <label>ITEM NAME</label>
+              <input type="text" id="sup-item" list="sup-defs" placeholder="Select or type item...">
+              <datalist id="sup-defs"></datalist>
             </div>
-            <div style="display:flex;gap:15px;align-items:center">
-              <label class="ropt" style="font-size:13px"><input type="checkbox" id="sup-filter" onchange="renderSup()" style="width:18px;height:18px;accent-color:#c9a84c"> Show Selected Only</label>
-              <input type="text" id="sup-q" placeholder="Search supplies..." oninput="renderSup()" style="max-width:250px;margin-bottom:0">
+            <div class="fg">
+              <label>QUANTITY</label>
+              <input type="number" id="sup-qty" placeholder="0" min="1">
             </div>
+            <div class="fg"><label>DATE</label><input type="date" id="sup-date"></div>
+            <div class="fg"><label>MONTH</label><select id="sup-form-mon"></select></div>
+            <div class="fg"><label>NEW ITEM?</label><button class="btn btn-ghost btn-sm" onclick="addSupItem()" style="height:46px">+ Save as Custom</button></div>
           </div>
-          <div class="sgrid" id="sup-grid"></div>
-          <div style="height:1px;background:rgba(255,255,255,0.05);margin:30px 0"></div>
-          <div style="display:flex;gap:15px;align-items:flex-end;margin-bottom:30px">
-            <div class="fg" style="flex:1"><label>Add Custom Supply Item</label><input type="text" id="sup-new" placeholder="Type item name and press Add..."></div>
-            <button class="btn btn-ghost" onclick="addSupItem()" style="padding:15px 25px">+ Add Item</button>
-          </div>
-          <div style="background:rgba(201,168,76,0.05);border:1px solid rgba(201,168,76,0.2);border-radius:24px;padding:30px">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-               <h3 style="color:#fff;font-size:18px">Register Bulk Order</h3>
-               <div style="display:flex;gap:15px;align-items:center">
-                 <input type="date" id="sup-log-date" style="width:auto;padding:8px 15px;font-size:14px">
-                 <button class="btn btn-gold btn-sm" onclick="logSup()">Log Selected Items to History</button>
-               </div>
-            </div>
-            <p style="font-size:13px;color:#94a3b8">Log the selected items above into your order history for the current month and date.</p>
+          <div class="btns">
+            <button class="btn btn-gold" onclick="addSupEntry()">+ Add Entry</button>
+            <button class="btn btn-ghost" onclick="clrSup()">Clear</button>
           </div>
         </div>
       </div>
       <div class="card">
-        <div class="card-head"><span class="card-title">Order History</span></div>
-        <div class="tbl-wrap">
-          <table>
-            <thead><tr><th>DATE</th><th>ITEM</th><th>QTY</th><th>MONTH</th><th></th></tr></thead>
-            <tbody id="sup-h-tb"><tr><td colspan="5"><div class="empty">No history logged yet</div></td></tr></tbody>
-          </table>
+        <div class="card-head">
+          <span class="card-title">Supplies Log</span>
+          <button class="btn btn-ghost btn-sm" onclick="exportSupCSV()">Export CSV</button>
         </div>
+        <div class="card-body" style="padding-bottom:8px"><div class="mbar" id="sup-mbar"></div></div>
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>DATE</th><th>ITEM</th><th>QTY</th><th>MONTH</th><th></th></tr></thead>
+          <tbody id="sup-tb"><tr><td colspan="5"><div class="empty">No entries yet</div></td></tr></tbody>
+        </table></div>
       </div>
     </div>
 
@@ -345,7 +332,7 @@ async function hydrate(){
     D.customSup = data.customSup || [];
     D.supOrders = data.supOrders || {};
     D.supplyLogs = data.supplyLogs || [];
-    renderCash(); renderSvc(); renderDash(); renderSup(); renderSupHistory();
+    renderCash(); renderSvc(); renderDash(); renderSup();
   } catch(e) {
     console.error('Failed to load data from server:', e);
   }
@@ -361,26 +348,33 @@ function nowM(){return MONTHS[new Date().getMonth()];}
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
 function buildSelects(){
-  ['c-mon','s-mon','sup-mon'].forEach(function(id){
+  ['c-mon','s-mon','sup-form-mon'].forEach(function(id){
     var el=document.getElementById(id);
     el.innerHTML=MONTHS.map(function(m,i){return '<option value="'+m+'">'+MN[i]+'</option>';}).join('');
     el.value=nowM();
   });
   document.getElementById('c-date').value=new Date().toISOString().split('T')[0];
-  document.getElementById('sup-log-date').value=new Date().toISOString().split('T')[0];
+  document.getElementById('sup-date').value=new Date().toISOString().split('T')[0];
   var d=new Date();
   document.getElementById('datebdg').textContent=d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
+  updateSupDatalist();
+}
+
+function updateSupDatalist(){
+  var dl=document.getElementById('sup-defs');
+  if(!dl) return;
+  dl.innerHTML=getAllSup().map(function(n){return '<option value="'+esc(n)+'">';}).join('');
 }
 
 function buildMbars(){
-  ['c-mbar','s-mbar'].forEach(function(id,idx){
+  ['c-mbar','s-mbar','sup-mbar'].forEach(function(id,idx){
     var el=document.getElementById(id);
     el.innerHTML='<button class="mb on" data-m="ALL">All</button>'+MONTHS.map(function(m){return '<button class="mb" data-m="'+m+'">'+m+'</button>';}).join('');
     el.querySelectorAll('.mb').forEach(function(b){
       b.addEventListener('click',function(){
         el.querySelectorAll('.mb').forEach(function(x){x.classList.remove('on');});
         b.classList.add('on');
-        if(idx===0)renderCash();else renderSvc();
+        if(idx===0)renderCash();else if(idx===1)renderSvc();else renderSup();
       });
     });
   });
@@ -524,70 +518,36 @@ function renderDash(){
   }).join('');}
 }
 
-function getAllSup(){return DEFS.concat(D.customSup||[]);}
-async function saveSup(){
-  var mon=document.getElementById('sup-mon').value;
-  var ord={};
-  document.querySelectorAll('.si').forEach(function(el){
-    var n=el.dataset.n;var q=el.querySelector('input');
-    ord[n]={chk:el.classList.contains('chk'),qty:q?q.value:''};
-  });
-  D.supOrders[mon]=ord;
+function getAllSup(){return DEFS.concat(D.customSup||[]).sort();}
+
+async function addSupEntry(){
+  var item=document.getElementById('sup-item').value.trim().toUpperCase();
+  var qty=document.getElementById('sup-qty').value;
+  if(!item||!qty){alert('Please enter item and quantity.');return;}
+  var entry = {
+    item:item,
+    qty:qty,
+    date:document.getElementById('sup-date').value,
+    mon:document.getElementById('sup-form-mon').value
+  };
   try {
-    await fetch(API + '/api/supply-orders', {
+    const res = await fetch(API + '/api/supply-log/bulk', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mon, orders: ord })
+      body: JSON.stringify([entry])
     });
-    showSaved();
-  } catch(e) {}
+    const saved = await res.json();
+    D.supplyLogs = (saved||[]).concat(D.supplyLogs);
+    renderSup(); clrSup(); showSaved();
+  } catch(e) { alert('Error saving supply entry'); }
 }
-function renderSup(){
-  var mon=document.getElementById('sup-mon').value;
-  var q=(document.getElementById('sup-q').value||'').toLowerCase();
-  var filterOn=document.getElementById('sup-filter').checked;
-  var ord=(D.supOrders&&D.supOrders[mon])||{};
-  var all=getAllSup();
-  var filtered=all.filter(function(n){
-    var o=ord[n]||{};
-    if(filterOn && !o.chk) return false;
-    return !q || n.toLowerCase().indexOf(q)!==-1;
-  });
-  
-  var sCnt=0; all.forEach(function(n){if(ord[n]&&ord[n].chk)sCnt++;});
-  document.getElementById('sup-t-cnt').textContent=all.length;
-  document.getElementById('sup-s-cnt').textContent=sCnt;
 
-  document.getElementById('sup-grid').innerHTML=filtered.map(function(n){
-    var o=ord[n]||{};
-    var safe=esc(n);
-    // Calculate total ordered in this month from logs
-    var total=D.supplyLogs.filter(function(l){return l.item===n && l.mon===mon;}).reduce(function(s,l){return s+(parseInt(l.qty)||0);},0);
+function clrSup(){document.getElementById('sup-item').value='';document.getElementById('sup-qty').value='';}
 
-    return '<div class="si'+(o.chk?' chk':'')+'" data-n="'+safe+'" onclick="tglSup(this)">'+
-      '<div class="chkmark">&#10003;</div>'+
-      '<div class="si-name">'+safe+(total>0?'<br><span class="sup-qty-badge">Ordered: '+total+'</span>':'')+'</div>'+
-      '<div class="si-qty" onclick="event.stopPropagation()">'+
-      '<input type="text" placeholder="Qty" value="'+esc(o.qty||'')+'" oninput="saveSupSilent()">'+
-      '<span>units</span></div></div>';
-  }).join('');
-}
-function persistSilent(){} 
-function tglSup(el){
-  el.classList.toggle('chk');
-  saveSup(); 
-  var all=getAllSup();
-  var mon=document.getElementById('sup-mon').value;
-  var ord=D.supOrders[mon]||{};
-  var sCnt=0; all.forEach(function(n){if(ord[n]&&ord[n].chk)sCnt++;});
-  document.getElementById('sup-s-cnt').textContent=sCnt;
-  if(document.getElementById('sup-filter').checked && !el.classList.contains('chk')) renderSup();
-}
 async function addSupItem(){
-  var v=document.getElementById('sup-new').value.trim().toUpperCase();
-  if(!v)return;
-  if(!D.customSup)D.customSup=[];
-  if(D.customSup.indexOf(v)===-1) {
+  var v=document.getElementById('sup-item').value.trim().toUpperCase();
+  if(!v){alert('Enter an item name first');return;}
+  if(D.customSup.indexOf(v)===-1 && DEFS.indexOf(v)===-1) {
     D.customSup.push(v);
     try {
       await fetch(API + '/api/custom-supplies', {
@@ -595,56 +555,33 @@ async function addSupItem(){
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: v })
       });
+      updateSupDatalist();
+      showSaved();
     } catch(e) {}
+  } else {
+    alert('Item already exists in list');
   }
-  document.getElementById('sup-new').value='';
-  renderSup(); showSaved();
 }
 
-async function logSup(){
-  var mon=document.getElementById('sup-mon').value;
-  var date=document.getElementById('sup-log-date').value;
-  var bulk=[];
-  document.querySelectorAll('.si.chk').forEach(function(el){
-    var n=el.dataset.n;
-    var q=el.querySelector('input').value;
-    bulk.push({item:n, qty:q, mon:mon, date:date});
-  });
-  if(!bulk.length){alert('Please select items to log.');return;}
-  try {
-    const res = await fetch(API + '/api/supply-log/bulk', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(bulk)
-    });
-    const saved = await res.json();
-    D.supplyLogs = (saved||[]).concat(D.supplyLogs);
-    renderSupHistory(); renderSup(); showSaved();
-    // Uncheck all after logging
-    document.querySelectorAll('.si.chk').forEach(function(el){el.classList.remove('chk');});
-    saveSup(); 
-  } catch(e) { alert('Error logging history'); }
-}
-
-function renderSupHistory(){
-  var tb=document.getElementById('sup-h-tb');
-  if(!D.supplyLogs || !D.supplyLogs.length){tb.innerHTML='<tr><td colspan="5"><div class="empty">No history logged yet</div></td></tr>';return;}
-  tb.innerHTML=D.supplyLogs.map(function(l){
+function renderSup(){
+  var m=getM('sup-mbar');
+  var rows=(m==='ALL'?D.supplyLogs:D.supplyLogs.filter(function(l){return l.mon===m;})).sort(function(a,b){return new Date(b.date)-new Date(a.date);});
+  var tb=document.getElementById('sup-tb');
+  if(!rows.length){tb.innerHTML='<tr><td colspan="5"><div class="empty">No entries for this period</div></td></tr>';return;}
+  tb.innerHTML=rows.map(function(l){
     return '<tr><td>'+esc(l.date)+'</td><td>'+esc(l.item)+'</td><td>'+esc(l.qty)+'</td><td>'+l.mon+'</td>'+
       '<td><button class="del-btn" onclick="delSupLog(\''+l._id+'\')">&#10005;</button></td></tr>';
   }).join('');
 }
 
 async function delSupLog(id){
-  if(!confirm('Delete this history entry?')) return;
+  if(!confirm('Delete this entry?')) return;
   try {
     await fetch(API + '/api/supply-log/' + id, { method: 'DELETE' });
     D.supplyLogs=D.supplyLogs.filter(function(l){return l._id!==id;});
-    renderSupHistory(); renderSup();
+    renderSup();
   } catch(e) { alert('Error deleting log'); }
 }
-
-document.getElementById('sup-mon').addEventListener('change',function(){renderSup(); renderSupHistory();});
 
 function exportCSV(filename, rows) {
   var csv = '\uFEFF';
