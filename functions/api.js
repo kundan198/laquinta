@@ -44,7 +44,9 @@ app.use(async (req, res, next) => {
 });
 
 // ─── API ROUTES ───────────────────────────────────────────
-app.get('/api/all', async (req, res) => {
+const router = express.Router();
+
+router.get('/all', async (req, res) => {
   try {
     const [cash, svcs, customSupDocs, supOrderDocs] = await Promise.all([
       CashEntry.find().sort({ createdAt: -1 }),
@@ -59,27 +61,27 @@ app.get('/api/all', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.post('/api/cash', async (req, res) => {
+router.post('/cash', async (req, res) => {
   try { const entry = await CashEntry.create(req.body); res.json(entry); } 
   catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.delete('/api/cash/:id', async (req, res) => {
+router.delete('/cash/:id', async (req, res) => {
   try { await CashEntry.findByIdAndDelete(req.params.id); res.json({ ok: true }); }
   catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.post('/api/svcs', async (req, res) => {
+router.post('/svcs', async (req, res) => {
   try { const entry = await ServiceEntry.create(req.body); res.json(entry); }
   catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.delete('/api/svcs/:id', async (req, res) => {
+router.delete('/svcs/:id', async (req, res) => {
   try { await ServiceEntry.findByIdAndDelete(req.params.id); res.json({ ok: true }); }
   catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.post('/api/custom-supplies', async (req, res) => {
+router.post('/custom-supplies', async (req, res) => {
   try {
     const { name } = req.body;
     const entry = await CustomSupply.findOneAndUpdate({ name }, { name }, { upsert: true, new: true });
@@ -87,12 +89,16 @@ app.post('/api/custom-supplies', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.post('/api/supply-orders', async (req, res) => {
+router.post('/supply-orders', async (req, res) => {
   try {
     const { mon, orders } = req.body;
     const entry = await SupplyOrder.findOneAndUpdate({ mon }, { orders }, { upsert: true, new: true });
     res.json(entry);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+
+// Use the router for both potential path formats
+app.use('/api', router);
+app.use('/.netlify/functions/api', router);
 
 module.exports.handler = serverless(app);
