@@ -635,25 +635,19 @@ function exportSvcCSV() {
 }
 
 function exportSupCSV() {
-  var mon = document.getElementById('sup-mon').value;
-  var ord = D.supOrders[mon] || {};
-  var all = getAllSup();
-  var rows = [['ITEM', 'STATUS', 'QTY', 'MONTH']];
-  var count = 0;
-  all.forEach(function(n) {
-    var o = ord[n] || {};
-    if (o.chk || o.qty) {
-      count++;
-      rows.push([
-        '"' + n.replace(/"/g, '""') + '"',
-        o.chk ? 'ORDER' : 'SKIP',
-        '"' + (o.qty || '').replace(/"/g, '""') + '"',
-        mon
-      ]);
-    }
+  var m = getM('sup-mbar');
+  var data = m === 'ALL' ? D.supplyLogs : D.supplyLogs.filter(function(e){return e.mon===m;});
+  var rows = [['DATE', 'ITEM', 'QTY', 'MONTH']];
+  data.forEach(function(e) {
+    rows.push([
+      '"' + e.date + '"',
+      '"' + e.item.replace(/"/g, '""') + '"',
+      '"' + e.qty + '"',
+      e.mon
+    ]);
   });
-  if(count === 0) { alert('No items selected or quantities entered for ' + mon); return; }
-  exportCSV('Supply_Order_' + mon, rows);
+  if(!data.length) { alert('No supply entries for ' + m); return; }
+  exportCSV('Supply_Log_' + m, rows);
 }
 
 hydrate();buildSelects();buildMbars();renderCash();renderSvc();renderDash();renderSup();
